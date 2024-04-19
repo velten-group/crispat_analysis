@@ -1,0 +1,404 @@
+---
+title: "Comparison of methods with varying thresholds"
+output: BiocStyle::html_document
+date: "19/04/2024"
+author: "Jana Braunger"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+BiocStyle::html_document 
+
+data_dir = '/Users/janabraunger/Documents/Projects/scCRISPR/data/'
+figdir = '/Users/janabraunger/Documents/Projects/scCRISPR/figures/discovery_comparison/'
+if(!dir.exists(figdir)) dir.create(figdir)
+knitr::opts_chunk$set(dev = c("png", "pdf"), fig.path = figdir)
+```
+
+# Required libraries and data
+## Load needed libraries
+```{r load_libraries, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(GGally)
+library(UpSetR)
+library(pheatmap)
+```
+
+## Load number of assigned cells
+```{r}
+data = 'Replogle_K562'
+
+# Varying UMI threshold
+n_assigned_cells_UMI <- read_csv(paste0(data_dir, 'guide_calling/', data, '/UMI/', 
+                                    'all_assignments.csv'), show_col_types = FALSE) 
+n_assigned_cells_UMI_single <- read_csv(paste0(data_dir, 'guide_calling/', data, '/UMI/', 
+                                    'single_assignments.csv'), show_col_types = FALSE) 
+
+# Varying ratio threshold
+n_assigned_cells_ratios <- read_csv(paste0(data_dir, 'guide_calling/', data, '/ratios/', 
+                                    'all_assignments.csv'), show_col_types = FALSE) 
+n_assigned_cells_ratios_single <- read_csv(paste0(data_dir, 'guide_calling/', data, '/ratios/', 
+                                    'single_assignments.csv'), show_col_types = FALSE) 
+
+# Varying quantile threshold
+n_assigned_cells_q <- read_csv(paste0(data_dir, 'guide_calling/', data, '/quantiles/', 
+                                    'all_assignments.csv'), show_col_types = FALSE) 
+n_assigned_cells_q_single <- read_csv(paste0(data_dir, 'guide_calling/', data, '/quantiles/', 
+                                    'single_assignments.csv'), show_col_types = FALSE) 
+```
+
+```{r}
+# add vertical lines for chosen thresholds
+UMI_t = 30
+ratio_t = 50
+quantile_t = 5
+```
+
+
+## Load power check results for various guide calling approaches
+```{r}
+get_power_check_results <- function(data, name, method_names){
+  method_name = method_names[method_names$dir_name == name, 'method']
+  df = readRDS(paste0(data_dir, 'sceptre_pipeline/', data, '/power_check/', name, 
+                                '/results_run_power_check.rds')) %>%
+    filter(pass_qc == TRUE) %>%
+    mutate(method = method_name)
+  df <- df %>% mutate(p_adj = p.adjust(df$p_value, method="BH"))
+  return(df)
+}
+```
+
+```{r}
+# Varying UMI threshold
+dir_names_UMI = c("UMI/t2", "UMI/t5", "UMI/t10", "UMI/t15", "UMI/t20", 
+              "UMI/t30", "UMI/t40", "UMI/t50", "UMI/t60", "UMI/t80", 
+              "UMI/t100", "UMI/t120", "UMI/t140", "UMI/t160", "UMI/t180", 
+              "UMI/t200")
+method_names_UMI <- data.frame('method' = c(2,5,10,15,20,30,40,50,60,80,100,120,140,160,180,200), 
+                           'dir_name' = dir_names_UMI)
+power_check_UMI <- lapply(dir_names_UMI, function(name) {get_power_check_results(data, name, method_names_UMI)}) %>% 
+  bind_rows()
+
+# Varying ratio threshold
+dir_names_ratio = c("ratios/t0.1", "ratios/t0.2", "ratios/t0.3", "ratios/t0.4", "ratios/t0.5", "ratios/t0.6", 
+              "ratios/t0.7", "ratios/t0.8", "ratios/t0.9")
+method_names_ratio <- data.frame('method' = c(10, 20, 30, 40, 50, 60, 70, 80, 90), 
+                           'dir_name' = dir_names_ratio)
+power_check_ratios <- lapply(dir_names_ratio, function(name) {get_power_check_results(data, name, method_names_ratio)}) %>% 
+  bind_rows()
+
+# Varying quantile threshold
+dir_names_q = c("quantiles/q0.01", "quantiles/q0.025", "quantiles/q0.05", "quantiles/q0.075", "quantiles/q0.1",
+              "quantiles/q0.2", "quantiles/q0.3", "quantiles/q0.4", "quantiles/q0.5")
+method_names_q <- data.frame('method' = c(1, 2.5, 5, 7.5, 10, 20, 30, 40, 50), 
+                           'dir_name' = dir_names_q)
+power_check_quantiles <- lapply(dir_names_q, function(name) {get_power_check_results(data, name, method_names_q)}) %>% 
+  bind_rows()
+```
+
+
+## Load calibration results for various guide calling approaches
+```{r}
+get_calibration_results <- function(data, name, method_names){
+  method_name = method_names[method_names$dir_name == name, 'method']
+  df = readRDS(paste0(data_dir, 'sceptre_pipeline/', data, '/discovery_analysis/', name, 
+                           '/results_run_calibration_check.rds')) %>%
+    filter(pass_qc == TRUE) %>%
+    mutate(method = method_name)
+  df <- df %>% mutate(p_adj = p.adjust(df$p_value, method="BH"))
+  return(df)
+}
+```
+
+```{r}
+# Varying UMI threshold
+calibration_UMI <- lapply(dir_names_UMI, function(name) {get_calibration_results(data, name, method_names_UMI)}) %>% 
+  bind_rows() %>%
+  group_by(method) %>%
+  mutate(total_tests = n()) %>%
+  filter(significant == TRUE) %>%
+  group_by(method, total_tests) %>%
+  summarize(false_discoveries = n()) %>% 
+  right_join(method_names_UMI) %>% 
+  replace(is.na(.), 0)
+
+# Varying ratio threshold
+calibration_ratios <- lapply(dir_names_ratio, function(name) {get_calibration_results(data, name, method_names_ratio)}) %>% 
+  bind_rows() %>%
+  group_by(method) %>%
+  mutate(total_tests = n()) %>%
+  filter(significant == TRUE) %>%
+  group_by(method, total_tests) %>%
+  summarize(false_discoveries = n())  %>% 
+  right_join(method_names_ratio) %>% 
+  replace(is.na(.), 0)
+
+# Varying quantile threshold
+calibration_quantiles <- lapply(dir_names_q, function(name) {get_calibration_results(data, name, method_names_q)}) %>% 
+  bind_rows() %>%
+  group_by(method) %>%
+  mutate(total_tests = n()) %>%
+  filter(significant == TRUE) %>%
+  group_by(method, total_tests) %>%
+  summarize(false_discoveries = n())  %>% 
+  right_join(method_names_q) %>% 
+  replace(is.na(.), 0)
+```
+
+
+## Load discovery analysis results for various guide calling approaches
+```{r}
+get_discovery_analysis_results <- function(data, name, method_names){
+  method_name = method_names[method_names$dir_name == name, 'method']
+  df <- readRDS(paste0(data_dir, 'sceptre_pipeline/', data, '/discovery_analysis/', name, 
+                           '/results_run_discovery_analysis.rds')) %>%
+    filter(pass_qc == TRUE, significant == TRUE) %>%
+    mutate(method = method_name)
+}
+```
+
+```{r}
+# varying UMI threshold
+discovery_analysis_UMI <- lapply(dir_names_UMI, function(name) {get_discovery_analysis_results(data, name, method_names_UMI)}) %>% 
+  bind_rows()
+
+# varying ratio threshold
+discovery_analysis_ratios <- lapply(dir_names_ratio, function(name) {get_discovery_analysis_results(data, name, method_names_ratio)}) %>% 
+  bind_rows()
+
+# varying quantile threshold
+discovery_analysis_q <- lapply(dir_names_q, function(name) {get_discovery_analysis_results(data, name, method_names_q)}) %>% 
+  bind_rows()
+```
+
+
+# Number of assignments
+## Varying UMI threshold
+```{r UMI_total_assignments, fig.height=3, fig.width = 3}
+ggplot(n_assigned_cells_UMI, aes(x = method, y = n_cells)) + 
+  geom_vline(xintercept = UMI_t, linetype="dashed") +
+  geom_point(color =  '#3776ab', size = 2) +
+  geom_line(color =  '#3776ab') +
+  theme_bw() + 
+  labs(x = 'UMI threshold', y = 'Number of total assignments') 
+```
+
+```{r UMI_single_assignments, fig.height=3, fig.width = 3}
+ggplot(n_assigned_cells_UMI_single, aes(x = method, y = n_cells)) + 
+  geom_vline(xintercept = UMI_t, linetype="dashed") +
+  geom_point(color =  '#3776ab', size = 2) +
+  geom_line(color =  '#3776ab') +
+  theme_bw() + 
+  labs(x = 'UMI threshold', y = 'Number of cells with\n single assignments')
+```
+
+
+## Varying ratio threshold
+```{r ratio_total_assignments, fig.height=3, fig.width = 3}
+ggplot(n_assigned_cells_ratios, aes(x = method, y = n_cells)) + 
+  geom_vline(xintercept = ratio_t, linetype="dashed") +
+  geom_point(color =  '#3776ab', size = 2) +
+  geom_line(color =  '#3776ab') +
+  theme_bw() + 
+  labs(x = 'Ratio threshold', y = 'Number of total assignments')
+```
+
+```{r ratio_single_assignments, fig.height=3, fig.width = 3}
+ggplot(n_assigned_cells_ratios_single, aes(x = method, y = n_cells)) + 
+  geom_vline(xintercept = ratio_t, linetype="dashed") +
+  geom_point(color =  '#3776ab', size = 2) +
+  geom_line(color =  '#3776ab') +
+  theme_bw() + 
+  labs(x = 'Ratio threshold', y = 'Number of cells with\n single assignments')
+```
+
+
+## Varying quantile threshold
+```{r quantile_total_assignments, fig.height=3, fig.width = 3}
+ggplot(n_assigned_cells_q, aes(x = method, y = n_cells)) + 
+  geom_vline(xintercept = quantile_t, linetype="dashed") +
+  geom_point(color =  '#3776ab', size = 2) +
+  geom_line(color =  '#3776ab') +
+  theme_bw() + 
+  labs(x = 'Quantile threshold', y = 'Number of total assignments')
+```
+
+```{r quantile_single_assignments, fig.height=3, fig.width = 3}
+ggplot(n_assigned_cells_q_single, aes(x = method, y = n_cells)) + 
+  geom_vline(xintercept = quantile_t, linetype="dashed") +
+  geom_point(color =  '#3776ab', size = 2) +
+  geom_line(color =  '#3776ab') +
+  theme_bw() + 
+  labs(x = 'Quantile threshold', y = 'Number of cells with\n single assignments')
+```
+
+
+# Analysis of true positives (power check on target genes)
+## Varying UMI threshold
+```{r sig_downreg_targets_UMI, fig.height=3, fig.width = 3}
+# Number of significantly downregulated target genes
+signif_targets_UMI <- power_check_UMI %>% filter(p_adj < 0.05) %>% 
+  group_by(method) %>% 
+  summarize(signif_targets = n()) 
+
+ggplot(signif_targets_UMI, aes(x = method, y = signif_targets)) +
+  geom_vline(xintercept = UMI_t, linetype="dashed") +
+  geom_point(color =  '#3776ab', size = 2) +
+  geom_line(color =  '#3776ab') +
+  theme_bw() + 
+  labs(x = 'UMI threshold', y = 'Number of significant target genes')
+```
+
+```{r UMI_median_lfc, fig.height=3, fig.width = 3}
+# Median lfc over targets that pass qc for all thresholds
+all_targets <- group_by(power_check_UMI, grna_target) %>% summarize(pass_QC = n()) %>% filter(pass_QC == 16)
+lfc <- filter(power_check_UMI, grna_target %in% all_targets$grna_target) %>%
+  group_by(method) %>%
+  summarize(median_lfc = median(-log_2_fold_change))
+
+ggplot(lfc, aes(x = method, y = median_lfc)) +
+  geom_vline(xintercept = UMI_t, linetype="dashed") +
+  geom_point(color =  '#3776ab', size = 2) +
+  geom_line(color =  '#3776ab') +
+  theme_bw() + 
+  labs(x = 'UMI threshold', y = 'Median negative log2 fold\nchange of the target gene')
+```
+
+
+## Varying ratio threshold
+```{r sig_downreg_targets_ratios, fig.height=3, fig.width = 3}
+# Number of significantly downregulated target genes
+signif_targets_ratios <- power_check_ratios %>% filter(p_adj < 0.05) %>% 
+  group_by(method) %>% 
+  summarize(signif_targets = n()) 
+
+ggplot(signif_targets_ratios, aes(x = method, y = signif_targets)) +
+  geom_vline(xintercept = ratio_t, linetype="dashed") +
+  geom_point(color =  '#3776ab', size = 2) +
+  geom_line(color =  '#3776ab') +
+  theme_bw() + 
+  labs(x = 'Ratio threshold', y = 'Number of significant target genes')
+```
+
+```{r ratios_median_lfc, fig.height=3, fig.width = 3}
+# Median lfc over targets that pass qc for all thresholds
+all_targets <- group_by(power_check_ratios, grna_target) %>% summarize(pass_QC = n()) %>% filter(pass_QC == 9)
+lfc <- filter(power_check_ratios, grna_target %in% all_targets$grna_target) %>%
+  group_by(method) %>%
+  summarize(median_lfc = median(-log_2_fold_change))
+
+ggplot(lfc, aes(x = method, y = median_lfc)) +
+  geom_vline(xintercept = ratio_t, linetype="dashed") +
+  geom_point(color =  '#3776ab', size = 2) +
+  geom_line(color =  '#3776ab') +
+  theme_bw() + 
+  labs(x = 'Ratio threshold', y = 'Median negative log2 fold\nchange of the target gene')
+```
+
+## Varying quantile threshold
+```{r sig_downreg_targets_quantiles, fig.height=3, fig.width = 3}
+# Number of significantly downregulated target genes
+signif_targets_quantiles <- power_check_quantiles %>% filter(p_adj < 0.05) %>% 
+  group_by(method) %>% 
+  summarize(signif_targets = n()) 
+
+ggplot(signif_targets_quantiles, aes(x = method, y = signif_targets)) +
+  geom_vline(xintercept = quantile_t, linetype="dashed") +
+  geom_point(color =  '#3776ab', size = 2) +
+  geom_line(color =  '#3776ab') +
+  theme_bw() + 
+  labs(x = 'Quantile threshold', y = 'Number of significant target genes')
+```
+
+```{r quantiles_median_lfc, fig.height=3, fig.width = 3}
+# Median lfc over targets that pass qc for all thresholds
+all_targets <- group_by(power_check_quantiles, grna_target) %>% summarize(pass_QC = n()) %>% filter(pass_QC == 9)
+lfc <- filter(power_check_quantiles, grna_target %in% all_targets$grna_target) %>%
+  group_by(method) %>%
+  summarize(median_lfc = median(-log_2_fold_change, na.rm = TRUE))
+
+ggplot(lfc, aes(x = method, y = median_lfc)) +
+  geom_vline(xintercept = quantile_t, linetype="dashed") +
+  geom_point(color =  '#3776ab', size = 2) +
+  geom_line(color =  '#3776ab') +
+  theme_bw() + 
+  labs(x = 'Quantile threshold', y = 'Median negative log2 fold\nchange of the target gene')
+```
+
+
+# Discovery analysis 
+## Varying UMI threshold
+```{r n_response_UMI, fig.height=3, fig.width = 3}
+# Get the number of response genes per perturbation
+n_discovery_UMI <- discovery_analysis_UMI %>% 
+  group_by(method) %>%
+  summarize(n_response_genes = n())
+
+ggplot(n_discovery_UMI, aes(x = method, y = n_response_genes)) + 
+  geom_vline(xintercept = UMI_t, linetype="dashed") +
+  geom_point(color =  '#3776ab', size = 2) +
+  geom_line(color =  '#3776ab') +
+  theme_bw() + 
+  labs(x = 'UMI threshold', y = 'Number of total discoveries')
+```
+
+
+
+```{r UMI_FP, fig.height=3.5, fig.width = 3.5}
+ggplot(calibration_UMI, aes(x = factor(method), y = false_discoveries)) +
+  geom_bar(stat = 'identity', fill = '#3776ab') + 
+  theme_bw() + 
+  labs(x = 'UMI threshold', y = paste0('Number of false discoveries'))
+```
+
+
+## Varying ratio threshold
+```{r n_response_ratios, fig.height=3, fig.width = 3}
+# Get the number of response genes per perturbation
+n_discovery_ratios <- discovery_analysis_ratios %>% 
+  group_by(method) %>%
+  summarize(n_response_genes = n())
+
+ggplot(n_discovery_ratios, aes(x = method, y = n_response_genes)) + 
+  geom_vline(xintercept = ratio_t, linetype="dashed") +
+  geom_point(color =  '#3776ab', size = 2) +
+  geom_line(color =  '#3776ab') +
+  theme_bw() + 
+  labs(x = 'Ratio threshold', y = 'Number of total discoveries')
+```
+
+
+```{r ratio_FP, fig.height=3.5, fig.width = 3.5}
+ggplot(calibration_ratios, aes(x = factor(method), y = false_discoveries)) +
+  geom_bar(stat = 'identity', fill = '#3776ab') + 
+  theme_bw() + 
+  labs(x = 'Ratio threshold', y = paste0('Number of false discoveries'))
+```
+
+## Varying quantile threshold
+```{r n_response_quantile, fig.height=3, fig.width = 3}
+# Get the number of response genes per perturbation
+n_discovery_q <- discovery_analysis_q %>% 
+  group_by(method) %>%
+  summarize(n_response_genes = n())
+
+ggplot(n_discovery_q, aes(x = method, y = n_response_genes)) + 
+  geom_vline(xintercept = quantile_t, linetype="dashed") +
+  geom_point(color =  '#3776ab', size = 2) +
+  geom_line(color =  '#3776ab') +
+  theme_bw() + 
+  labs(x = 'Quantile threshold', y = 'Number of total discoveries')
+```
+
+
+```{r quantile_FP, fig.height=3.5, fig.width = 3.5}
+ggplot(calibration_quantiles, aes(x = factor(method), y = false_discoveries)) +
+  geom_bar(stat = 'identity', fill = '#3776ab') + 
+  theme_bw() + 
+  labs(x = 'Quantile threshold', y = paste0('Number of false discoveries'))
+```
+
+# Session info
+```{r}
+sessionInfo()
+```

@@ -1,0 +1,4 @@
+# Distribution / packaging
+*.ipynb_checkpoints
+.DS_Store
+__pychache__
