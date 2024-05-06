@@ -1,0 +1,8 @@
+R==4.2.1
+tidyverse==2.0.0
+sceptre==0.9.1
+Seurat==5.0.1
+Matrix==1.6-5
+pheatmap==1.0.12
+GGally==2.2.1
+cowplot==1.1.3
