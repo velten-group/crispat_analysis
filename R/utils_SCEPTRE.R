@@ -85,17 +85,18 @@ get_data_per_batch_replogle <- function(gRNA_target_df, assigned_cells, batch_nu
 }
 
 
-get_data_csv <- function(gRNA_target_df, assigned_cells, batch_number, data_dir){
+get_data_csv <- function(gRNA_target_df, batch_number, data_dir){
   # load data
   ge_df = read_csv(paste0(data_dir, 'gene_expression_counts.csv')) %>%
     column_to_rownames(var = 'gene')
   gRNA_df = read_csv(paste0(data_dir, 'gRNA_counts.csv')) %>%
-    column_to_rownames(var = 'gRNA')
+    filter(gRNA %in% gRNA_target_df$grna_id) %>%
+    column_to_rownames(var = 'gRNA') 
   batch_data = list('Gene Expression' = ge_df, 
                     'CRISPR Guide Capture' = gRNA_df)
   
   # calculate cell cycle score covariates, proportion mitochondrial genes and total UMIs
-  batch_covariates <- get_cov_per_batch(batch_data, "1")
+  batch_covariates <- get_cov_per_batch(batch_data, batch_number)
   
   return(list(grna_matrix = data.matrix(batch_data$`CRISPR Guide Capture`),
               response_matrix = data.matrix(batch_data$`Gene Expression`),
@@ -103,12 +104,13 @@ get_data_csv <- function(gRNA_target_df, assigned_cells, batch_number, data_dir)
 }
 
 
-create_sceptre <- function(gRNA_target_df, assigned_cells, batches, moi, data_dir, name){
+create_sceptre <- function(gRNA_target_df, assigned_cells, batches, moi, data_dir, 
+                           name, use_ondisc = FALSE, out_dir = NULL){
   # load data for the first batch
   if (name == 'Replogle_K562' | name == 'Replogle_RPE1'){
     batch_data <- get_data_per_batch_replogle(gRNA_target_df, assigned_cells, batches[1], data_dir, name) 
   } else {
-    batch_data <- get_data_csv(gRNA_target_df, assigned_cells, batches[1], data_dir) 
+    batch_data <- get_data_csv(gRNA_target_df, batches[1], data_dir) 
   }
   
   grna_matrix <- batch_data$grna_matrix
@@ -121,14 +123,14 @@ create_sceptre <- function(gRNA_target_df, assigned_cells, batches, moi, data_di
       batch_data <- get_data_per_batch_replogle(gRNA_target_df, assigned_cells, batch, data_dir, name) 
       
       # merge with the other batches
-      grna_matrix = cbind(grna_matrix, batch_data$grna_matrix)
-      response_matrix = cbind(response_matrix, batch_data$response_matrix)
+      grna_matrix <- cbind(grna_matrix, batch_data$grna_matrix)
+      response_matrix <- cbind(response_matrix, batch_data$response_matrix)
       all_covariates <- rbind(all_covariates, batch_data$covariates)
     }
   }
   
   # save the cell indices
-  cell_indices = data.frame(cell_index = seq(1, ncol(grna_matrix)),
+  cell_indices <- data.frame(cell_index = seq(1, ncol(grna_matrix)),
                             cell = colnames(grna_matrix))
   
   gRNA_target_df <- filter(gRNA_target_df, grna_id %in% rownames(grna_matrix)) %>% 
@@ -136,11 +138,13 @@ create_sceptre <- function(gRNA_target_df, assigned_cells, batches, moi, data_di
     distinct()
 
   # create SCEPTRE object
-  sceptre_object = import_data(response_matrix = response_matrix,
+  sceptre_object <- import_data(response_matrix = response_matrix,
                                grna_matrix = grna_matrix,
                                grna_target_data_frame = gRNA_target_df,
                                moi = moi,
-                               extra_covariates = all_covariates)
+                               extra_covariates = all_covariates,
+                               use_ondisc = use_ondisc, 
+                               directory_to_write = out_dir)
   return(list(sceptre = sceptre_object, cell_indices = cell_indices))
 }
 

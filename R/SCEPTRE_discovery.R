@@ -117,7 +117,7 @@ processed_assignment_out <- process_initial_assignment_list(initial_assignment_l
 # write guide assignment results to the sceptre object
 sceptre_object@grna_assignments_raw <- processed_assignment_out$grna_assignments_raw
 sceptre_object@grnas_per_cell <- as.integer(processed_assignment_out$grnas_per_cell)
-sceptre_object@cells_w_multiple_grnas <- processed_assignment_out$cells_w_multiple_grnas
+sceptre_object@cells_w_zero_or_twoplus_grnas <- processed_assignment_out$cells_w_multiple_grnas
 sceptre_object@initial_grna_assignment_list <- PGMM_list 
 sceptre_object@last_function_called <- "assign_grnas"
 sceptre_object@functs_called["assign_grnas"] <- TRUE

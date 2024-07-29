@@ -1,7 +1,7 @@
 ---
-title: "Discovery_comparison"
+title: "08_discovery_comparison"
 output: BiocStyle::html_document
-date: "06/05/2024"
+date: "12/02/2024"
 author: "Jana Braunger"
 ---
 
@@ -23,7 +23,7 @@ library(GGally)
 library(pheatmap)
 ```
 
-## Load guide assignment results
+## Load guide calling results
 ```{r}
 # data frame containing the cells with single assignments per method
 guide_assignment <- read_csv(paste0(data_dir, 'guide_calling/Replogle_K562/', 
@@ -37,9 +37,8 @@ head(n_assigned_cells)
 ```
 
 ```{r}
-# create a coloring df
-colors <- c('UMI_t30' = "#828282", 'Maximum' = "#9ace25", 'ratio_50%' = "#009500", 
-           'Cell Ranger' = "#06cdff", 'Poisson-Gauss' = "#06A4FF", 
+colors <- c('UMI_t15' = "#828282", 'Maximum' = "#9ace25", 'ratio_30%' = "#009500", 
+           'Gauss' = "#06cdff", 'Poisson-Gauss' = "#06A4FF", 
            '2-Beta' = "#e6c202", '3-Beta' = "#e68902",
            'Poisson' = "#e63102", 'Negative Binomial' = "#e60291", 
            'Binomial' = "#d102e6", 'top_5%_cells' = "#8102e6")
@@ -65,16 +64,25 @@ get_power_check_results <- function(data, name, method_names){
 # define all methods
 dir_names = c("2-BetaMM", "3-BetaMM", "cellranger", "replogle", 
               "SCEPTRE", "negative_binomial", "maximum", "binomial", 
-              "quantiles/q0.05", "UMI/t30", "ratios/t0.5")
-method_names <- data.frame('method' = c("2-Beta", "3-Beta", "Cell Ranger", "Poisson-Gauss", 
+              "quantiles/q0.05", "UMI/t15", "ratios/t0.3")
+method_names <- data.frame('method' = c("2-Beta", "3-Beta", "Gauss", "Poisson-Gauss", 
                                         "Poisson", "Negative Binomial", "Maximum", "Binomial",
-                                        "top_5%_cells", "UMI_t30", "ratio_50%"), 
+                                        "top_5%_cells", "UMI_t15", "ratio_30%"), 
                            'dir_name' = dir_names)
 data = 'Replogle_K562'
 
 power_check <- lapply(dir_names, function(name) {get_power_check_results(data, name, method_names)}) %>% 
   bind_rows() %>%
   mutate(method = factor(method, levels = names(colors), ordered = TRUE))
+
+power_check_summary <- power_check %>% 
+  group_by(method) %>%
+  mutate(total_positives = n()) %>%
+  filter(p_adj < 0.05) %>%
+  group_by(method, total_positives) %>%
+  summarize(tp = n()) %>% 
+  mutate(tpr = tp / total_positives) 
+
 head(power_check)
 ```
 
@@ -96,10 +104,11 @@ get_calibration_results <- function(data, name, method_names){
 calibration <- lapply(dir_names, function(name) {get_calibration_results(data, name, method_names)}) %>% 
   bind_rows() %>%
   group_by(method) %>%
-  mutate(total_tests = n()) %>%
+  mutate(total_negatives = n()) %>%
   filter(significant == TRUE) %>%
-  group_by(method, total_tests) %>%
+  group_by(method, total_negatives) %>%
   summarize(false_discoveries = n()) %>% 
+  mutate(fpr = false_discoveries / total_negatives) %>%
   right_join(method_names) %>% 
   replace(is.na(.), 0) %>%
   mutate(method = factor(method, levels = names(colors), ordered = TRUE))
@@ -126,7 +135,7 @@ head(discovery_analysis)
 
 
 # Analysis of true positives (power check on target genes)
-```{r sig_downreg_targets, fig.height=3.2, fig.width = 4.4}
+```{r sig_downreg_targets, fig.height=3.3, fig.width = 4.4}
 # Number of significantly downregulated target genes
 signif_targets <- power_check %>% filter(p_adj < 0.05) %>% 
   group_by(method) %>% 
@@ -136,9 +145,10 @@ signif_targets <- power_check %>% filter(p_adj < 0.05) %>%
 ggplot(signif_targets, aes(x = n_cells, y = signif_targets, group = method)) +
   geom_point(aes(color = method), size = 2) + 
   theme_bw() + 
-  labs(x = 'Number of assigned cells', y = 'Significant target genes') +
+  labs(x = 'Number of uniquely assigned cells', y = 'Number of significant target genes') +
   scale_color_manual(name = 'Guide assignment', values = colors, 
-                     breaks = names(colors)) 
+                     breaks = names(colors)) #+
+  #scale_shape_manual(name = 'Guide assignment', values = shapes)
 ```
 
 
@@ -192,20 +202,21 @@ pheatmap(diff_matrix, display_numbers = F,
          color = rev(colorRampPalette((RColorBrewer::brewer.pal(n = 7, name ="RdBu")))(100)),
          breaks = color_breaks,
          legend_title = "Median difference of log2 fold changes", 
-         gaps_row = c(1, 3, 5), gaps_col = c(1, 3, 5))
+         gaps_row = c(1, 3, 5), gaps_col = c(1,3,5))
 ```
 
-```{r median_lfc, fig.height=3.5, fig.width = 5}
+```{r median_lfc, fig.height=3.3, fig.width = 4.4}
 # median log2 fold change over number of assigned cells
 medians <- apply(lfc, 2, function(x) median(x, na.rm = TRUE))
 med_lfc <- data.frame(median_lfc = medians) %>% 
   rownames_to_column(var = "method") %>% 
   left_join(n_assigned_cells)
+write_csv(med_lfc, paste0(data_dir, 'guide_calling/Replogle_K562/median_lfc.csv'))
 
 ggplot(med_lfc, aes(x = n_cells, y = median_lfc, group = method)) + 
   geom_point(aes(color = method), size = 2) + 
   theme_bw() + 
-  labs(x = 'Number of assigned cells', y = 'Median negative log2 fold change') +
+  labs(x = 'Number of uniquely assigned cells', y = 'Median negative log2 fold change') +
   scale_color_manual(name = 'Guide assignment', values = colors, 
                      breaks = names(colors))
 ```
@@ -242,6 +253,22 @@ ggplot(stats, aes(x = method, y = value, fill = method)) +
 ```
 
 
+```{r intersection_discovery_genes, fig.height = 3, eval=F}
+# Total number of response genes and overlap between them
+perturbation_response_pairs <- list('Replogle' = paste0(replogle$grna_target, '__', replogle$response_id), 
+                                    'Cellranger' = paste0(cellranger$grna_target, '__', cellranger$response_id),
+                                    'SCEPTRE' = paste0(sceptre$grna_target, '__', sceptre$response_id),
+                                    '3-Beta MM' = paste0(beta3$grna_target, '__', beta3$response_id),
+                                    '2-Beta MM' = paste0(beta2$grna_target, '__', beta2$response_id),
+                                    '75% Threshold' = paste0(t75$grna_target, '__', t75$response_id),
+                                    'UMI 5 Threshold' = paste0(t5$grna_target, '__', t5$response_id),
+                                    'Neg Binom SCEPTRE' = paste0(neg_binom$grna_target, '__', neg_binom$response_id))
+
+upset(fromList(perturbation_response_pairs), order.by = "freq", nsets = 8, nintersects = 15,
+       mainbar.y.label = "Counts", sets.x.label = "Perturbation response pairs", mb.ratio = c(0.5, 0.5))
+```
+
+
 ```{r scatter_false_total_discoveries, fig.width=4.4, fig.height=3.3}
 # scatter plot with number of total discoveries vs number of assigned cells
 discoveries <- stats %>% 
@@ -253,7 +280,7 @@ discoveries <- stats %>%
 ggplot(discoveries, aes(x = n_cells, y = total_discoveries, group = method)) +
   geom_point(aes(color = method), size = 2) +
   theme_bw() + 
-  labs(color = 'Guide calling method', x = 'Number of assigned cells', y = 'Number of total discoveries') +
+  labs(color = 'Guide calling method', x = 'Number of uniquely assigned cells', y = 'Number of discoveries') +
   scale_color_manual(name = 'Guide assignment', values = colors, 
                      breaks = names(colors)) #+
   #scale_shape_manual(name = 'Guide assignment', values = shapes)
@@ -265,7 +292,8 @@ ggplot(calibration, aes(x = method, y = false_discoveries, fill = method)) +
   theme_bw() + 
   labs(x = 'Method', y = 'Number of false discoveries') + 
   theme(legend.position = "none") +
-  scale_fill_manual(values = colors)
+  scale_fill_manual(values = colors) +
+  scale_y_continuous(breaks = seq(0, 2, by = 1)) 
 ```
 
 # Data set summary 
@@ -282,23 +310,59 @@ results <- as.data.frame(scale(results))
 seq_breaks <- c(seq(min(results), 0, (0-min(results))/100 * 2), seq(0, max(results), (max(results)-0)/100 * 2)[-1])
 pheatmap(results, labels_col = c("Target downregulation", "Significant targets",
                                  "Total discoveries"),
-         cluster_rows=FALSE, cluster_cols = FALSE, breaks = seq_breaks, gaps_row = c(1, 3, 5),
+         cluster_rows=FALSE, cluster_cols = FALSE, 
+         breaks = seq_breaks, gaps_row = c(1, 3, 5),
          color = rev(colorRampPalette((RColorBrewer::brewer.pal(n = 7, name ="RdBu")))(100)))
 ```
+
+## TPR-FPR plot
+```{r tpr_fpr, fig.width=4.4, fig.height=3.3}
+# sensitivity = true positive rate (TPR)
+# specificity = 1 - false positive rate (FPR)
+stats <- inner_join(calibration, power_check_summary)
+
+ggplot(stats, aes(x = fpr, y = tpr, group = method)) +
+  geom_point(aes(color = method), size = 1) +
+  theme_bw() + 
+  labs(x = 'False positive rate (1 - specificity)', y = 'True positive rate (sensitivity)') +
+  scale_color_manual(name = 'Guide assignment', values = colors, 
+                     breaks = names(colors)) + 
+  xlim(0, 0.05)
+```
+
 
 
 ## Run time comparison
 ```{r}
 get_run_time <- function(file_dir, name, method_names){
   method_name = method_names[method_names$dir_name == name, 'method']
-  df = read_csv(file_dir, show_col_types = F) 
 
   # Estimate full time for methods that were run in parallel for gRNA sets
   if (method_name %in% c('Poisson', 'Negative Binomial')){
-    df <- mutate(df, time = time / 200 * 2282)
-  }
-  if (method_name %in% c('Binomial')){
-    df <- mutate(df, time = time / 400 * 2282)
+    indices <- seq(0, 2200, 200)
+    df <- lapply(indices, function(ix){
+      read_csv(paste0(file_dir, 'run_time', ix, '.csv'), show_col_types = F)
+    }) %>% bind_rows() %>% 
+      group_by(method) %>% 
+      summarize(time = sum(time)) %>%
+      mutate(mode = "normal")
+    df_parallel <- read_csv(paste0(file_dir, 'run_time_parallel.csv'), show_col_types = F) %>% 
+      mutate(mode = "parallel")
+    df <- rbind(df, df_parallel)
+  } else if (method_name %in% c('Binomial')){
+    indices <- seq(0, 2000, 400)
+    df <- lapply(indices, function(ix){
+      read_csv(paste0(file_dir, 'run_time', ix, '.csv'), show_col_types = F)
+    }) %>% bind_rows() %>% 
+      group_by(method) %>% 
+      summarize(time = sum(time)) %>%
+      mutate(mode = "normal")
+    df_parallel <- read_csv(paste0(file_dir, 'run_time_parallel.csv'), show_col_types = F) %>% 
+      mutate(mode = "parallel")
+    df <- rbind(df, df_parallel)
+  } else {
+    df <- read_csv(paste0(file_dir, 'run_time.csv'), show_col_types = F) %>%
+      mutate(mode = "normal")
   }
   df <- df %>%
     mutate(method = method_name) %>%
@@ -308,18 +372,18 @@ get_run_time <- function(file_dir, name, method_names){
 }
 ```
 
-```{r gc_run_time, fig.width = 8, fig.height = 2.5}
+```{r }
 # Guide calling
 dir_names_gc = c("2-BetaMM", "3-BetaMM", "cellranger", "replogle", 
               "SCEPTRE", "negative_binomial", "maximum", "binomial",
               "quantiles", "UMI", "ratios")
-method_names_gc <- data.frame('method' = c("2-Beta", "3-Beta", "Cell Ranger", "Poisson-Gauss", 
+method_names_gc <- data.frame('method' = c("2-Beta", "3-Beta", "Gauss", "Poisson-Gauss", 
                                         "Poisson", "Negative Binomial", "Maximum", "Binomial",
-                                        "top_5%_cells", "UMI_t30", "ratio_50%"), 
+                                        "top_5%_cells", "UMI_t15", "ratio_30%"), 
                            'dir_name' = dir_names_gc) 
 
 gc_times <- lapply(dir_names_gc, function(name) {
-  get_run_time(paste0(data_dir, 'guide_calling/', data, '/', name, '/run_time.csv'), 
+  get_run_time(paste0(data_dir, 'guide_calling/', data, '/', name, '/'), 
                name, method_names_gc)}) %>% 
   bind_rows() %>%
   mutate(method = if_else(method == "Negative Binomial", "Negative\nBinomial", method)) %>%
@@ -329,14 +393,46 @@ gc_times <- lapply(dir_names_gc, function(name) {
 names(colors)[names(colors) == "Negative Binomial"] <- "Negative\nBinomial"
 names(colors)[names(colors) == "top_5%_cells"] <- "Top 5%\ncells"
 names(colors)[names(colors) == "Poisson-Gauss"] <- "Poisson-\nGauss"
-
-ggplot(gc_times, aes(x = reorder(method, h), y = h, color = method)) + 
-  geom_point(size = 2) +
-  theme_bw() + 
-  labs(x = '', y = 'Run time [h]', title = 'Guide assignment') + 
-  theme(legend.position = "none") +
-  scale_color_manual(values = colors)
 ```
+
+```{r gc_run_time, fig.width = 8, fig.height = 3}
+library(cowplot)
+p1 <- ggplot(gc_times, aes(x = reorder(method, h), y = h, color = method, shape = mode)) + 
+  geom_point(size = 2) + 
+  theme_bw() + 
+  labs(x = NULL, y = NULL, title = "Guide assignment") + 
+  theme(legend.position = "none",
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()) +
+  scale_color_manual(values = colors) +
+  scale_shape_manual(values = c("normal" = 19, "parallel" = 24)) +
+  coord_cartesian(ylim = c(25,175))  
+
+p2 <- ggplot(gc_times, aes(x = reorder(method, h), y = h, color = method, shape = mode)) + 
+  geom_point(size = 2) + 
+  theme_bw() + 
+  labs(x = NULL, y = NULL) + 
+  theme(legend.position = "none") +
+  scale_color_manual(values = colors) +
+  scale_shape_manual(values = c("normal" = 19, "parallel" = 24)) +
+  coord_cartesian(ylim = c(0,12)) 
+
+# Remove the x-axis label and ticks from the top plot
+p1 <- p1 + theme(axis.title.x = element_blank(), axis.text.x = element_blank(), axis.ticks.x = element_blank())
+
+# Combine the plots using cowplot
+combined_plot <- plot_grid(p1, p2, align = "v", ncol = 1, rel_heights = c(1, 1))
+
+# Add a shared y-axis label
+final_plot <- ggdraw() + 
+  draw_plot(combined_plot, 0.02, 0, 0.98, 1) +  
+  draw_label("Run time [h]", x = 0.01, y = 0.5, vjust = 1, angle = 90, size = 12)
+
+
+# Display the final plot
+print(final_plot)
+```
+
 
 ```{r}
 get_run_time <- function(file_dir, name, method_names){
@@ -362,7 +458,7 @@ power_times <- lapply(dir_names, function(name) {
   mutate(method = if_else(method == "Poisson-Gauss", "Poisson-\nGauss", method))
 
 ggplot(power_times, aes(x = reorder(method, h), y = mins, color = method)) + 
-  geom_point(size = 2) +
+  geom_point(size = 2) + 
   theme_bw() + 
   labs(x = '', y = 'Run time [mins]', title = 'Power check')+ 
   theme(legend.position = "none") +
@@ -379,7 +475,7 @@ discovery <- lapply(dir_names, function(name) {
   mutate(method = if_else(method == "Poisson-Gauss", "Poisson-\nGauss", method))
 
 ggplot(filter(discovery, step == 'calibration check'), aes(x = reorder(method, h), y = h, color = method)) + 
-  geom_point(size = 2) +
+  geom_point(size = 2) + 
   theme_bw() + 
   labs(x = '', y = 'Run time [h]', title = 'Calibration check')+ 
   theme(legend.position = "none") +
@@ -388,7 +484,7 @@ ggplot(filter(discovery, step == 'calibration check'), aes(x = reorder(method, h
 
 ```{r discovery_run_time, fig.width = 8, fig.height = 2.5}
 ggplot(filter(discovery, step == 'discovery analysis'), aes(x = reorder(method, h), y = h, color = method)) + 
-  geom_point(size = 2) +
+  geom_point(size = 2) + 
   theme_bw() + 
   labs(x = '', y = 'Run time [h]', title = 'Discovery Analysis')+ 
   theme(legend.position = "none") +
@@ -402,7 +498,9 @@ names(colors)[names(colors) == "Top 5%\ncells"] <- "top_5%_cells"
 names(colors)[names(colors) == "Poisson-\nGauss"] <- "Poisson-Gauss"
 
 # Run time summary heatmap
-run_times <- gc_times %>% subset(select = c(method, h)) %>%
+run_times <- gc_times %>% 
+  filter(mode == "normal") %>%
+  subset(select = c(method, h)) %>%
   rename(gc_time = h) %>%
   left_join(subset(discovery, select = c(method, step, h)) %>% filter(step %in% c('discovery analysis')) %>% spread(step, h)) %>%
   mutate(method = if_else(method == "Negative\nBinomial", "Negative Binomial", method)) %>%

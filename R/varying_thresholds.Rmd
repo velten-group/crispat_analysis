@@ -1,7 +1,7 @@
 ---
-title: "Comparison of methods with varying thresholds"
+title: "07_varying_thresholds"
 output: BiocStyle::html_document
-date: "19/04/2024"
+date: "06/12/2023"
 author: "Jana Braunger"
 ---
 
@@ -22,6 +22,7 @@ library(tidyverse)
 library(GGally)
 library(UpSetR)
 library(pheatmap)
+library(cowplot)
 ```
 
 ## Load number of assigned cells
@@ -49,10 +50,14 @@ n_assigned_cells_q_single <- read_csv(paste0(data_dir, 'guide_calling/', data, '
 
 ```{r}
 # add vertical lines for chosen thresholds
-UMI_t = 30
-ratio_t = 50
+UMI_t = 15
+ratio_t = 30
 quantile_t = 5
+
+all_t <- data.frame(assignment = c('UMI_t', 'ratio_X%', 'top_X%_cells'),
+                    threshold = c(UMI_t, ratio_t, quantile_t))
 ```
+
 
 
 ## Load power check results for various guide calling approaches
@@ -175,62 +180,99 @@ discovery_analysis_q <- lapply(dir_names_q, function(name) {get_discovery_analys
 # Number of assignments
 ## Varying UMI threshold
 ```{r UMI_total_assignments, fig.height=3, fig.width = 3}
-ggplot(n_assigned_cells_UMI, aes(x = method, y = n_cells)) + 
+u1 <- ggplot(n_assigned_cells_UMI, aes(x = method, y = n_cells)) + 
   geom_vline(xintercept = UMI_t, linetype="dashed") +
-  geom_point(color =  '#3776ab', size = 2) +
+  geom_point(color =  '#3776ab', size = 2, shape = 4) +
   geom_line(color =  '#3776ab') +
   theme_bw() + 
-  labs(x = 'UMI threshold', y = 'Number of total assignments') 
+  labs(x = 'UMI threshold', y = 'Total number of assigned cells') 
+u1
 ```
 
 ```{r UMI_single_assignments, fig.height=3, fig.width = 3}
-ggplot(n_assigned_cells_UMI_single, aes(x = method, y = n_cells)) + 
+u2 <- ggplot(n_assigned_cells_UMI_single, aes(x = method, y = n_cells)) + 
   geom_vline(xintercept = UMI_t, linetype="dashed") +
   geom_point(color =  '#3776ab', size = 2) +
   geom_line(color =  '#3776ab') +
   theme_bw() + 
-  labs(x = 'UMI threshold', y = 'Number of cells with\n single assignments')
+  labs(x = 'UMI threshold', y = 'Number of uniquely assigned cells')
+u2
 ```
 
 
 ## Varying ratio threshold
 ```{r ratio_total_assignments, fig.height=3, fig.width = 3}
-ggplot(n_assigned_cells_ratios, aes(x = method, y = n_cells)) + 
+r1 <- ggplot(n_assigned_cells_ratios, aes(x = method, y = n_cells)) + 
   geom_vline(xintercept = ratio_t, linetype="dashed") +
-  geom_point(color =  '#3776ab', size = 2) +
+  geom_point(color =  '#3776ab', size = 2, shape = 4) +
   geom_line(color =  '#3776ab') +
   theme_bw() + 
-  labs(x = 'Ratio threshold', y = 'Number of total assignments')
+  labs(x = 'Ratio threshold', y = 'Total number of assigned cells')
+r1
 ```
 
 ```{r ratio_single_assignments, fig.height=3, fig.width = 3}
-ggplot(n_assigned_cells_ratios_single, aes(x = method, y = n_cells)) + 
+r2 <- ggplot(n_assigned_cells_ratios_single, aes(x = method, y = n_cells)) + 
   geom_vline(xintercept = ratio_t, linetype="dashed") +
   geom_point(color =  '#3776ab', size = 2) +
   geom_line(color =  '#3776ab') +
   theme_bw() + 
-  labs(x = 'Ratio threshold', y = 'Number of cells with\n single assignments')
+  labs(x = 'Ratio threshold', y = 'Number of uniquely assigned cells')
+r2
 ```
 
 
 ## Varying quantile threshold
 ```{r quantile_total_assignments, fig.height=3, fig.width = 3}
-ggplot(n_assigned_cells_q, aes(x = method, y = n_cells)) + 
+q1 <- ggplot(n_assigned_cells_q, aes(x = method, y = n_cells)) + 
   geom_vline(xintercept = quantile_t, linetype="dashed") +
-  geom_point(color =  '#3776ab', size = 2) +
+  geom_point(color =  '#3776ab', size = 2, shape = 4) +
   geom_line(color =  '#3776ab') +
   theme_bw() + 
-  labs(x = 'Quantile threshold', y = 'Number of total assignments')
+  labs(x = 'Quantile threshold', y = 'Total number of assigned cells')
+q1
 ```
 
 ```{r quantile_single_assignments, fig.height=3, fig.width = 3}
-ggplot(n_assigned_cells_q_single, aes(x = method, y = n_cells)) + 
+q2 <- ggplot(n_assigned_cells_q_single, aes(x = method, y = n_cells)) + 
   geom_vline(xintercept = quantile_t, linetype="dashed") +
   geom_point(color =  '#3776ab', size = 2) +
   geom_line(color =  '#3776ab') +
   theme_bw() + 
-  labs(x = 'Quantile threshold', y = 'Number of cells with\n single assignments')
+  labs(x = 'Quantile threshold', y = 'Number of uniquely assigned cells')
+q2
 ```
+
+```{r}
+n_assigned_cells <- n_assigned_cells_UMI %>% 
+  mutate(assignment = 'UMI_t') %>%
+  bind_rows(n_assigned_cells_ratios %>% mutate(assignment = 'ratio_X%')) %>%
+  bind_rows(n_assigned_cells_q %>% mutate(assignment = "top_X%_cells"))
+
+row1 <- ggplot(n_assigned_cells, aes(x = method, y = n_cells)) + 
+  facet_wrap(~assignment, nrow = 1, scales = "free_x") +
+  geom_point(color =  '#3776ab', size = 2, shape = 4) +
+  geom_line(color =  '#3776ab') +
+  geom_vline(data = all_t, aes(xintercept = threshold), linetype="dashed") +
+  theme_bw() + 
+  labs(x = 'Threshold', y = 'Total number of assigned cells')
+```
+
+```{r}
+n_single_assigned_cells <- n_assigned_cells_UMI_single %>% 
+  mutate(assignment = 'UMI_t') %>%
+  bind_rows(n_assigned_cells_ratios_single %>% mutate(assignment = 'ratio_X%')) %>%
+  bind_rows(n_assigned_cells_q_single %>% mutate(assignment = "top_X%_cells"))
+
+row2 <- ggplot(n_single_assigned_cells, aes(x = method, y = n_cells)) + 
+  facet_wrap(~assignment, nrow = 1, scales = "free_x") +
+  geom_point(color =  '#3776ab', size = 2) +
+  geom_line(color =  '#3776ab') +
+  geom_vline(data = all_t, aes(xintercept = threshold), linetype="dashed") +
+  theme_bw() + 
+  labs(x = 'Threshold', y = 'Number of uniquely\nassigned cells')
+```
+
 
 
 # Analysis of true positives (power check on target genes)
@@ -241,27 +283,29 @@ signif_targets_UMI <- power_check_UMI %>% filter(p_adj < 0.05) %>%
   group_by(method) %>% 
   summarize(signif_targets = n()) 
 
-ggplot(signif_targets_UMI, aes(x = method, y = signif_targets)) +
+u3 <- ggplot(signif_targets_UMI, aes(x = method, y = signif_targets)) +
   geom_vline(xintercept = UMI_t, linetype="dashed") +
   geom_point(color =  '#3776ab', size = 2) +
   geom_line(color =  '#3776ab') +
   theme_bw() + 
   labs(x = 'UMI threshold', y = 'Number of significant target genes')
+u3
 ```
 
 ```{r UMI_median_lfc, fig.height=3, fig.width = 3}
 # Median lfc over targets that pass qc for all thresholds
 all_targets <- group_by(power_check_UMI, grna_target) %>% summarize(pass_QC = n()) %>% filter(pass_QC == 16)
-lfc <- filter(power_check_UMI, grna_target %in% all_targets$grna_target) %>%
+lfc_UMI <- filter(power_check_UMI, grna_target %in% all_targets$grna_target) %>%
   group_by(method) %>%
   summarize(median_lfc = median(-log_2_fold_change))
 
-ggplot(lfc, aes(x = method, y = median_lfc)) +
+u4 <- ggplot(lfc_UMI, aes(x = method, y = median_lfc)) +
   geom_vline(xintercept = UMI_t, linetype="dashed") +
   geom_point(color =  '#3776ab', size = 2) +
   geom_line(color =  '#3776ab') +
   theme_bw() + 
   labs(x = 'UMI threshold', y = 'Median negative log2 fold\nchange of the target gene')
+u4
 ```
 
 
@@ -272,27 +316,29 @@ signif_targets_ratios <- power_check_ratios %>% filter(p_adj < 0.05) %>%
   group_by(method) %>% 
   summarize(signif_targets = n()) 
 
-ggplot(signif_targets_ratios, aes(x = method, y = signif_targets)) +
+r3 <- ggplot(signif_targets_ratios, aes(x = method, y = signif_targets)) +
   geom_vline(xintercept = ratio_t, linetype="dashed") +
   geom_point(color =  '#3776ab', size = 2) +
   geom_line(color =  '#3776ab') +
   theme_bw() + 
   labs(x = 'Ratio threshold', y = 'Number of significant target genes')
+r3
 ```
 
 ```{r ratios_median_lfc, fig.height=3, fig.width = 3}
 # Median lfc over targets that pass qc for all thresholds
 all_targets <- group_by(power_check_ratios, grna_target) %>% summarize(pass_QC = n()) %>% filter(pass_QC == 9)
-lfc <- filter(power_check_ratios, grna_target %in% all_targets$grna_target) %>%
+lfc_ratios <- filter(power_check_ratios, grna_target %in% all_targets$grna_target) %>%
   group_by(method) %>%
   summarize(median_lfc = median(-log_2_fold_change))
 
-ggplot(lfc, aes(x = method, y = median_lfc)) +
+r4 <- ggplot(lfc_ratios, aes(x = method, y = median_lfc)) +
   geom_vline(xintercept = ratio_t, linetype="dashed") +
   geom_point(color =  '#3776ab', size = 2) +
   geom_line(color =  '#3776ab') +
   theme_bw() + 
   labs(x = 'Ratio threshold', y = 'Median negative log2 fold\nchange of the target gene')
+r4
 ```
 
 ## Varying quantile threshold
@@ -302,27 +348,60 @@ signif_targets_quantiles <- power_check_quantiles %>% filter(p_adj < 0.05) %>%
   group_by(method) %>% 
   summarize(signif_targets = n()) 
 
-ggplot(signif_targets_quantiles, aes(x = method, y = signif_targets)) +
+q3 <- ggplot(signif_targets_quantiles, aes(x = method, y = signif_targets)) +
   geom_vline(xintercept = quantile_t, linetype="dashed") +
   geom_point(color =  '#3776ab', size = 2) +
   geom_line(color =  '#3776ab') +
   theme_bw() + 
   labs(x = 'Quantile threshold', y = 'Number of significant target genes')
+q3
 ```
 
 ```{r quantiles_median_lfc, fig.height=3, fig.width = 3}
 # Median lfc over targets that pass qc for all thresholds
 all_targets <- group_by(power_check_quantiles, grna_target) %>% summarize(pass_QC = n()) %>% filter(pass_QC == 9)
-lfc <- filter(power_check_quantiles, grna_target %in% all_targets$grna_target) %>%
+lfc_q <- filter(power_check_quantiles, grna_target %in% all_targets$grna_target) %>%
   group_by(method) %>%
   summarize(median_lfc = median(-log_2_fold_change, na.rm = TRUE))
 
-ggplot(lfc, aes(x = method, y = median_lfc)) +
+q4 <- ggplot(lfc_q, aes(x = method, y = median_lfc)) +
   geom_vline(xintercept = quantile_t, linetype="dashed") +
   geom_point(color =  '#3776ab', size = 2) +
   geom_line(color =  '#3776ab') +
   theme_bw() + 
   labs(x = 'Quantile threshold', y = 'Median negative log2 fold\nchange of the target gene')
+q4
+```
+
+
+```{r}
+signif_targets <- signif_targets_UMI %>% 
+  mutate(assignment = 'UMI_t') %>%
+  bind_rows(signif_targets_ratios %>% mutate(assignment = 'ratio_X%')) %>%
+  bind_rows(signif_targets_quantiles %>% mutate(assignment = "top_X%_cells"))
+
+row3 <- ggplot(signif_targets, aes(x = method, y = signif_targets)) +
+  facet_wrap(~assignment, nrow = 1, scales = "free_x") +
+  geom_point(color =  '#3776ab', size = 2) +
+  geom_line(color =  '#3776ab') +
+  geom_vline(data = all_t, aes(xintercept = threshold), linetype="dashed") +
+  theme_bw() + 
+  labs(x = 'Threshold', y = 'Number of significant\ntarget genes')
+```
+
+```{r}
+lfc <- lfc_UMI %>% 
+  mutate(assignment = 'UMI_t') %>%
+  bind_rows(lfc_ratios %>% mutate(assignment = 'ratio_X%')) %>%
+  bind_rows(lfc_q %>% mutate(assignment = "top_X%_cells"))
+
+row4 <- ggplot(lfc, aes(x = method, y = median_lfc)) +
+  facet_wrap(~assignment, nrow = 1, scales = "free_x") +
+  geom_vline(data = all_t, aes(xintercept = threshold), linetype="dashed") +
+  geom_point(color =  '#3776ab', size = 2) +
+  geom_line(color =  '#3776ab') +
+  theme_bw() + 
+  labs(x = 'Threshold', y = 'Median negative log2 fold\nchange of the target gene')
 ```
 
 
@@ -334,21 +413,23 @@ n_discovery_UMI <- discovery_analysis_UMI %>%
   group_by(method) %>%
   summarize(n_response_genes = n())
 
-ggplot(n_discovery_UMI, aes(x = method, y = n_response_genes)) + 
+u5 <- ggplot(n_discovery_UMI, aes(x = method, y = n_response_genes)) + 
   geom_vline(xintercept = UMI_t, linetype="dashed") +
   geom_point(color =  '#3776ab', size = 2) +
   geom_line(color =  '#3776ab') +
   theme_bw() + 
   labs(x = 'UMI threshold', y = 'Number of total discoveries')
+u5
 ```
 
 
 
 ```{r UMI_FP, fig.height=3.5, fig.width = 3.5}
-ggplot(calibration_UMI, aes(x = factor(method), y = false_discoveries)) +
+u6 <- ggplot(calibration_UMI, aes(x = factor(method), y = false_discoveries)) +
   geom_bar(stat = 'identity', fill = '#3776ab') + 
   theme_bw() + 
   labs(x = 'UMI threshold', y = paste0('Number of false discoveries'))
+u6
 ```
 
 
@@ -359,20 +440,22 @@ n_discovery_ratios <- discovery_analysis_ratios %>%
   group_by(method) %>%
   summarize(n_response_genes = n())
 
-ggplot(n_discovery_ratios, aes(x = method, y = n_response_genes)) + 
+r5 <- ggplot(n_discovery_ratios, aes(x = method, y = n_response_genes)) + 
   geom_vline(xintercept = ratio_t, linetype="dashed") +
   geom_point(color =  '#3776ab', size = 2) +
   geom_line(color =  '#3776ab') +
   theme_bw() + 
   labs(x = 'Ratio threshold', y = 'Number of total discoveries')
+r5
 ```
 
 
 ```{r ratio_FP, fig.height=3.5, fig.width = 3.5}
-ggplot(calibration_ratios, aes(x = factor(method), y = false_discoveries)) +
+r6 <- ggplot(calibration_ratios, aes(x = factor(method), y = false_discoveries)) +
   geom_bar(stat = 'identity', fill = '#3776ab') + 
   theme_bw() + 
   labs(x = 'Ratio threshold', y = paste0('Number of false discoveries'))
+r6
 ```
 
 ## Varying quantile threshold
@@ -382,20 +465,75 @@ n_discovery_q <- discovery_analysis_q %>%
   group_by(method) %>%
   summarize(n_response_genes = n())
 
-ggplot(n_discovery_q, aes(x = method, y = n_response_genes)) + 
+q5 <- ggplot(n_discovery_q, aes(x = method, y = n_response_genes)) + 
   geom_vline(xintercept = quantile_t, linetype="dashed") +
   geom_point(color =  '#3776ab', size = 2) +
   geom_line(color =  '#3776ab') +
   theme_bw() + 
   labs(x = 'Quantile threshold', y = 'Number of total discoveries')
+q5
 ```
 
 
 ```{r quantile_FP, fig.height=3.5, fig.width = 3.5}
-ggplot(calibration_quantiles, aes(x = factor(method), y = false_discoveries)) +
+q6 <- ggplot(calibration_quantiles, aes(x = factor(method), y = false_discoveries)) +
   geom_bar(stat = 'identity', fill = '#3776ab') + 
   theme_bw() + 
   labs(x = 'Quantile threshold', y = paste0('Number of false discoveries'))
+q6
+```
+
+
+```{r}
+n_discovery <- n_discovery_UMI %>% 
+  mutate(assignment = 'UMI_t') %>%
+  bind_rows(n_discovery_ratios %>% mutate(assignment = 'ratio_X%')) %>%
+  bind_rows(n_discovery_q %>% mutate(assignment = "top_X%_cells"))
+
+row5 <- ggplot(n_discovery, aes(x = method, y = n_response_genes)) + 
+  facet_wrap(~assignment, nrow = 1, scales = "free_x") +
+  geom_vline(data = all_t, aes(xintercept = threshold), linetype="dashed") +
+  geom_point(color =  '#3776ab', size = 2) +
+  geom_line(color =  '#3776ab') +
+  theme_bw() + 
+  labs(x = 'Threshold', y = 'Number of discoveries')
+```
+
+```{r}
+calibration <- calibration_UMI %>% 
+  mutate(assignment = 'UMI_t') %>%
+  bind_rows(calibration_ratios %>% mutate(assignment = 'ratio_X%')) %>%
+  bind_rows(calibration_quantiles %>% mutate(assignment = "top_X%_cells"))
+
+row6 <- ggplot(calibration, aes(x = factor(method), y = false_discoveries)) +
+  facet_wrap(~assignment, nrow = 1, scales = "free_x") +
+  geom_bar(stat = 'identity', fill = '#3776ab') + 
+  theme_bw() + 
+  labs(x = 'Threshold', y = paste0('Number of false discoveries'))
+```
+
+```{r combi_shared_y, fig.width = 12, fig.height = 16}
+plot_grid(row1, row2, row4, row3, row5, row6, ncol = 1, labels = "AUTO")
+```
+
+
+```{r combined_plot, fig.width = 18, fig.height = 10}
+plot_grid(u1, u2, u4, u3, u5, u6, r1, r2, r4, r3, r5, r6, q1, q2, q4, q3, q5, q6,
+          labels = c("A(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)",
+                     "B(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)",
+                     "C(i)", "(ii)", "(iii)", "(iv)", "(v)", "(vi)"), 
+          ncol = 6)
+```
+
+```{r combined_plot_t, fig.width = 11, fig.height = 18}
+plot_grid(u1, r1, q1, u2, r2, q2, u4, r4, q4, u3, r3, q3, u5, r5, q5, u6, r6, q6,
+          labels = c("A(i)", "(ii)", "(iii)", 
+                     "B(i)", "(ii)", "(iii)",  
+                     "C(i)", "(ii)", "(iii)",
+                     "D(i)", "(ii)", "(iii)", 
+                     "E(i)", "(ii)", "(iii)",
+                     "F(i)", "(ii)", "(iii)"), 
+          ncol = 3)
 ```
 
 # Session info
