@@ -10,6 +10,5 @@ module load devel/miniconda/3
 eval "$(conda shell.bash hook)"
 conda activate sc
 
-start_grna="$1"
-echo "Guide calling SCEPTRE with start gRNA $start_grna"
-python guide_calling/guide_calling_SCEPTRE.py --config guide_calling/scripts/config_SCEPTRE.json --start_gRNA $start_grna
+echo "Guide calling SCEPTRE"
+python guide_assignment/SCEPTRE.py --config guide_assignment/scripts/config.json 

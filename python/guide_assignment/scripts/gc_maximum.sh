@@ -10,4 +10,4 @@ module load devel/miniconda/3
 eval "$(conda shell.bash hook)"
 conda activate sc
 
-python guide_calling/guide_calling_maximum.py --config guide_calling/scripts/config_maximum.json
+python guide_assignment/maximum.py --config guide_assignment/scripts/config.json

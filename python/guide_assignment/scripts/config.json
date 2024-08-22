@@ -1,0 +1,7 @@
+{
+  "input_file": "../data/Replogle/Replogle_K562_essential/Replogle_K562_essential_gRNA_counts.h5ad",
+  "out_dir": "../data/guide_calling/Replogle_K562/",
+  "UMI_thresholds": [2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20,30,40,50,60,80,100,150,200],
+  "ratio_thresholds": [0.1,0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+  "quantile_thresholds": [0.01, 0.025, 0.05, 0.075, 0.1, 0.2, 0.3, 0.4, 0.5]
+}

@@ -10,6 +10,5 @@ module load devel/miniconda/3
 eval "$(conda shell.bash hook)"
 conda activate sc
 
-start_grna="$1"
-echo "Guide calling binomial with start gRNA $start_grna"
-python guide_calling/guide_calling_binomial.py --config guide_calling/scripts/config_binomial.json --start_gRNA $start_grna
+echo "Guide assignment binomial"
+python guide_assignment/binomial.py --config guide_assignment/scripts/config.json
